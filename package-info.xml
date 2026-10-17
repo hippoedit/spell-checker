@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!DOCTYPE package-info SYSTEM "http://www.hippoedit.com/xml/package-info">
+<package-info xmlns="http://www.hippoedit.com/xml/package-info" xmlns:smf="http://www.hippoedit.com/">
+    <id>CE3B04B4-AD3F-4827-A629-4C5149C4DAA4</id>
+    <name>Spell Checker</name>
+    <version>1.0.2.4</version>
+    <required>1.51.12</required>
+    <description>Hunspell based spell checker plug-in for HippoEDIT</description>
+    <author>HippoEDIT.com</author>
+    <email>supportbox@hippoedit.com</email>
+    <homepage>http://wiki.hippoedit.com/plugins/spell-checker</homepage>
+    <memo></memo>
+
+    <install architecture="*" unicode="*" pdb="*">
+        <readme type="inline">This will install Spell Checker plugin for HippoEDIT.</readme>
+    </install>
+
+    <install architecture="x32" unicode="true">
+        <require-file name="x32u/SpellChecker.dll" destination="%{plugins}%/spellchecker.dll" />
+    </install>
+    <install architecture="x32" unicode="true" pdb="true">
+        <require-zip name="x32u/SpellChecker.pdb.zip" destination="%{plugins}%" />
+    </install>
+
+    <install architecture="x32" unicode="false">
+        <require-file name="x32/SpellChecker.dll" destination="%{plugins}%/spellchecker.dll" />
+    </install>
+    <install architecture="x32" unicode="false" pdb="true">
+        <require-zip name="x32/SpellChecker.pdb.zip" destination="%{plugins}%" />
+    </install>
+
+    <install architecture="x64">
+        <require-file name="x64/SpellChecker.dll" destination="%{plugins}%/spellchecker.dll" />
+    </install>
+    <install architecture="x64" pdb="true">
+        <require-zip name="x64/SpellChecker.pdb.zip" destination="%{plugins}%" />
+    </install>
+
+    <install architecture="*" unicode="*" pdb="*">
+        <install-plugin path="%{plugins}%/spellchecker.dll"/>
+    </install>
+
+    <uninstall architecture="*" unicode="*" pdb="*">
+        <readme type="inline">This will uninstall Spell Checker plugin for HippoEDIT.</readme>
+        <uninstall-plugin id="CE3B04B4-AD3F-4827-A629-4C5149C4DAA4"/>
+        <remove-file name="%{plugins}%/spellchecker.dll" />
+        <remove-file name="%{plugins}%/spellchecker.pdb" />
+    </uninstall>
+</package-info>

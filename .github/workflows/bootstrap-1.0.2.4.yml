@@ -1,0 +1,98 @@
+name: Bootstrap SpellChecker 1.0.2.4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package-info.xml
+      - bootstrap/1.0.2.4.json
+      - .github/workflows/bootstrap-1.0.2.4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ github.repository == 'hippoedit/spell-checker' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout distribution metadata
+        uses: actions/checkout@v4
+
+      - name: Import and verify legacy payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          manifest=bootstrap/1.0.2.4.json
+          test "$(jq -r '.schema' "$manifest")" = '1'
+          version=$(jq -r '.version' "$manifest")
+          tag=$(jq -r '.tag' "$manifest")
+          asset=$(jq -r '.asset' "$manifest")
+          plugin_id=$(jq -r '.plugin_id' "$manifest")
+          base_url=$(jq -r '.source.base_url' "$manifest")
+
+          test "$version" = '1.0.2.4'
+          test "$tag" = 'v1.0.2.4'
+          test "$asset" = 'spell-checker-1.0.2.4.zip'
+          test "$plugin_id" = 'CE3B04B4-AD3F-4827-A629-4C5149C4DAA4'
+          grep -Fq "<id>${plugin_id}</id>" package-info.xml
+          grep -Fq "<version>${version}</version>" package-info.xml
+
+          rm -rf .release-stage .release-verify "$asset"
+          mkdir -p .release-stage .release-verify
+          cp package-info.xml .release-stage/package-info.xml
+
+          jq -c '.files | to_entries[]' "$manifest" |
+          while IFS= read -r item; do
+            target=$(jq -r '.key' <<<"$item")
+            source_path=$(jq -r '.value.source' <<<"$item")
+            expected=$(jq -r '.value.blob_sha' <<<"$item")
+            [[ "$expected" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$target" != /* && "$target" != *".."* ]]
+            [[ "$source_path" != /* && "$source_path" != *".."* ]]
+
+            mkdir -p ".release-stage/$(dirname "$target")"
+            curl --fail --silent --show-error --location --retry 3 \
+              "$base_url/$source_path" \
+              --output ".release-stage/$target"
+
+            actual=$(python3 - ".release-stage/$target" <<'PY'
+          from hashlib import sha1
+          from pathlib import Path
+          import sys
+
+          data = Path(sys.argv[1]).read_bytes()
+          digest = sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          print(digest)
+          PY
+            )
+            if [ "$actual" != "$expected" ]; then
+              echo "Legacy payload mismatch for $source_path: $actual != $expected" >&2
+              exit 1
+            fi
+          done
+
+          test "$(find .release-stage -type f | wc -l)" = '7'
+          find .release-stage -type f -exec touch -t 198001010000.00 {} +
+          (cd .release-stage && find . -type f -printf '%P\n' | LC_ALL=C sort | zip -X "../$asset" -@ >/dev/null)
+          unzip -t "$asset"
+          unzip -l "$asset"
+          sha256sum "$asset"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release download "$tag" --pattern "$asset" --dir .release-verify
+            cmp "$asset" ".release-verify/$asset"
+            echo "Release $tag already exists with the identical canonical asset."
+          else
+            gh release create "$tag" "$asset" \
+              --target "$GITHUB_SHA" \
+              --title "Spell Checker $version" \
+              --notes "Bootstrap of the existing HippoEDIT Spell Checker $version binary distribution from hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee. Binary payload is verified byte-for-byte by legacy Git blob SHA; PDB archive filename case is normalized to the package manifest."
+            gh release download "$tag" --pattern "$asset" --dir .release-verify
+            cmp "$asset" ".release-verify/$asset"
+          fi
+
+          echo "Canonical release asset:"
+          sha256sum "$asset"
