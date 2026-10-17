@@ -2,17 +2,23 @@
 
 Canonical distribution repository for the HippoEDIT Spell Checker plugin.
 
-Spell Checker is a normal HippoEDIT plugin that is bundled by default with the editor installer. Its plugin version and release lifecycle are independent from the editor version when compatibility permits.
+Spell Checker is a normal HippoEDIT plugin that is bundled by default with the editor installer. It can be enabled/disabled independently and may be released independently while its editor compatibility contract permits.
 
-## Distribution
+## Current canonical release
 
-Versioned GitHub Releases own the canonical binary distribution. Each release publishes one ZIP named `spell-checker-<version>.zip` containing:
+The first canonical external release is `2.0.86`, bootstrapped from the exact SpellChecker binaries shipped in the accepted HippoEDIT 2.0.86 Unicode x86 and x64 installers.
 
-- `package-info.xml`
-- `x32/SpellChecker.dll` and optional PDB archive
-- `x32u/SpellChecker.dll` and optional PDB archive
-- `x64/SpellChecker.dll` and optional PDB archive
+The release ZIP is the binary distribution source of truth:
 
-The HippoEDIT installer and website plugin publisher should consume or byte-verify against the same release artifact.
+```text
+spell-checker-2.0.86.zip
+  package-info.xml
+  x32u/SpellChecker.dll
+  x64/SpellChecker.dll
+```
 
-The initial `1.0.2.4` release is bootstrapped byte-for-byte from the legacy website payload anchored at `hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee`.
+The bootstrap verifies the published installer SHA-256 values, the extracted DLL SHA-256 values, plugin GUID `CE3B04B4-AD3F-4827-A629-4C5149C4DAA4`, and PE file/product version `2.0.86` before creating the Release.
+
+The old website `1.0.2.4` package is historical and is not the source for the current release: its DLLs differ from the binaries shipped with HippoEDIT 2.0.86, and its PDB archives correspond to those old DLLs.
+
+Future editor/installers and the website plugin publisher should consume or byte-verify the same versioned Spell Checker Release artifact rather than maintaining a website-local copy.
