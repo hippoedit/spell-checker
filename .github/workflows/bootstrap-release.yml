@@ -1,4 +1,4 @@
-name: Diagnose current installer SpellChecker binaries
+name: Diagnose current SpellChecker versions
 
 on:
   push:
@@ -12,45 +12,23 @@ jobs:
   diagnose:
     runs-on: ubuntu-24.04
     steps:
-      - name: Extract and inspect current binaries without execution
+      - name: Read PE version resources from current installer binaries
         run: |
           set -euo pipefail
           mkdir -p /tmp/hippo-installers
           cd /tmp/hippo-installers
-
-          inspect() {
-            file="$1"
-            expected="$2"
-            variant="$3"
-            echo "=== $variant / $file ==="
+          for spec in \
+            'hippou200.exe:85834ed84e56428bb95d387323fd2394a46c36150ba22d8a8b7cd760e13e1b6d:x32u' \
+            'hippo64_200.exe:9b2dccf98fd3bf2fcf6be0111bed58af959dcfac36088367c1ac53a1fd98d2cd:x64'
+          do
+            IFS=: read -r file expected variant <<<"$spec"
             curl --fail --silent --show-error --location --retry 3 \
               --user-agent 'HippoEDIT-GitHub-Actions/1.0' \
               "https://www.hippoedit.com/download/$file" --output "$file"
-            actual_installer=$(sha256sum "$file" | awk '{print $1}')
-            echo "installer_sha256=$actual_installer"
-            test "$actual_installer" = "$expected"
-
-            rm -rf "$variant"
-            mkdir "$variant"
+            test "$(sha256sum "$file" | awk '{print $1}')" = "$expected"
+            mkdir -p "$variant"
             7z e -y -o"$variant" "$file" 'plugins/SpellChecker.dll' >/dev/null
-            test -f "$variant/SpellChecker.dll"
-            echo "size=$(stat -c '%s' "$variant/SpellChecker.dll")"
-            echo "sha256=$(sha256sum "$variant/SpellChecker.dll" | awk '{print $1}')"
-            python3 - "$variant/SpellChecker.dll" <<'PY'
-          from hashlib import sha1
-          from pathlib import Path
-          import sys
-          data = Path(sys.argv[1]).read_bytes()
-          print('git_blob_sha=' + sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest())
-          PY
-            echo '--- ASCII identity/version strings ---'
-            strings -a "$variant/SpellChecker.dll" | grep -Ei -m 40 'spell|version|CE3B|HippoEDIT|hunspell' || true
-            echo '--- UTF-16LE identity/version strings ---'
-            strings -a -el "$variant/SpellChecker.dll" | grep -Ei -m 80 'spell|version|CE3B|HippoEDIT|hunspell|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true
-          }
-
-          inspect hippou200.exe 85834ed84e56428bb95d387323fd2394a46c36150ba22d8a8b7cd760e13e1b6d x32u
-          inspect hippo64_200.exe 9b2dccf98fd3bf2fcf6be0111bed58af959dcfac36088367c1ac53a1fd98d2cd x64
-
-          echo '=== Cross-variant hashes ==='
-          sha256sum x32u/SpellChecker.dll x64/SpellChecker.dll
+            echo "=== $variant ==="
+            strings -a -el "$variant/SpellChecker.dll" > "$variant/utf16.txt"
+            grep -n -A4 -B2 -E 'FileVersion|ProductVersion|FileDescription|ProductName' "$variant/utf16.txt" || true
+          done
