@@ -1,0 +1,73 @@
+name: Bootstrap canonical SpellChecker release
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/bootstrap-release.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build verified release from public plugin bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          manifest=bootstrap/1.0.2.4.json
+          version=$(jq -r '.version' "$manifest")
+          tag=$(jq -r '.tag' "$manifest")
+          asset=$(jq -r '.asset' "$manifest")
+          plugin_id=$(jq -r '.plugin_id' "$manifest")
+          endpoint='https://www.hippoedit.com/api/get_bundle.php'
+
+          rm -rf .stage .bundles .verify "$asset"
+          mkdir -p .stage .bundles .verify
+          cp package-info.xml .stage/package-info.xml
+
+          jq -c '.files | to_entries[]' "$manifest" | while IFS= read -r item; do
+            target=$(jq -r '.key' <<<"$item")
+            arch=$(jq -r '.value.architecture' <<<"$item")
+            unicode=$(jq -r '.value.unicode' <<<"$item")
+            pdb=$(jq -r '.value.pdb' <<<"$item")
+            entry=$(jq -r '.value.entry' <<<"$item")
+            expected=$(jq -r '.value.blob_sha' <<<"$item")
+            bundle=".bundles/$(echo "$target" | tr '/' '_').hebundle"
+
+            curl --fail --silent --show-error --location --retry 3 \
+              --user-agent 'HippoEDIT-GitHub-Actions/1.0' --get "$endpoint" \
+              --data-urlencode 'type=plugin' --data-urlencode "id=$plugin_id" \
+              --data-urlencode "architecture=$arch" --data-urlencode "unicode=$unicode" \
+              --data-urlencode "pdb=$pdb" --output "$bundle"
+            unzip -t "$bundle"
+            mkdir -p ".stage/$(dirname "$target")"
+            unzip -p "$bundle" "$entry" > ".stage/$target"
+            test -s ".stage/$target"
+
+            actual=$(python3 - ".stage/$target" <<'PY'
+          from hashlib import sha1
+          from pathlib import Path
+          import sys
+          data = Path(sys.argv[1]).read_bytes()
+          print(sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest())
+          PY
+            )
+            test "$actual" = "$expected"
+          done
+
+          test "$(find .stage -type f | wc -l)" = 7
+          find .stage -type f -exec touch -t 198001010000.00 {} +
+          (cd .stage && find . -type f -printf '%P\n' | LC_ALL=C sort | zip -X "../$asset" -@ >/dev/null)
+          unzip -t "$asset"
+          digest=$(sha256sum "$asset" | awk '{print $1}')
+          echo "SHA256=$digest"
+
+          gh release create "$tag" "$asset" --target "$GITHUB_SHA" \
+            --title "Spell Checker $version" \
+            --notes "Canonical bootstrap of HippoEDIT Spell Checker $version. Binary payload is verified byte-for-byte against hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee Git blob SHAs; PDB archive filename case is normalized to package-info.xml."
+          gh release download "$tag" --pattern "$asset" --dir .verify
+          cmp "$asset" ".verify/$asset"
