@@ -31,7 +31,7 @@ jobs:
           tag=$(jq -r '.tag' "$manifest")
           asset=$(jq -r '.asset' "$manifest")
           plugin_id=$(jq -r '.plugin_id' "$manifest")
-          base_url=$(jq -r '.source.base_url' "$manifest")
+          bundle_url=$(jq -r '.source.bundle_url' "$manifest")
 
           test "$version" = '1.0.2.4'
           test "$tag" = 'v1.0.2.4'
@@ -40,23 +40,37 @@ jobs:
           grep -Fq "<id>${plugin_id}</id>" package-info.xml
           grep -Fq "<version>${version}</version>" package-info.xml
 
-          rm -rf .release-stage .release-verify "$asset"
-          mkdir -p .release-stage .release-verify
+          rm -rf .release-stage .release-verify .legacy-bundles "$asset"
+          mkdir -p .release-stage .release-verify .legacy-bundles
           cp package-info.xml .release-stage/package-info.xml
 
           jq -c '.files | to_entries[]' "$manifest" |
           while IFS= read -r item; do
             target=$(jq -r '.key' <<<"$item")
-            source_path=$(jq -r '.value.source' <<<"$item")
+            architecture=$(jq -r '.value.architecture' <<<"$item")
+            unicode=$(jq -r '.value.unicode' <<<"$item")
+            pdb=$(jq -r '.value.pdb' <<<"$item")
+            entry=$(jq -r '.value.entry' <<<"$item")
             expected=$(jq -r '.value.blob_sha' <<<"$item")
             [[ "$expected" =~ ^[0-9a-f]{40}$ ]]
             [[ "$target" != /* && "$target" != *".."* ]]
-            [[ "$source_path" != /* && "$source_path" != *".."* ]]
+            [[ "$entry" != /* && "$entry" != *".."* ]]
+
+            bundle=".legacy-bundles/$(echo "$target" | tr '/' '_').hebundle"
+            curl --fail --silent --show-error --location --retry 3 \
+              --user-agent 'HippoEDIT-GitHub-Actions/1.0' \
+              --get "$bundle_url" \
+              --data-urlencode 'type=plugin' \
+              --data-urlencode "id=$plugin_id" \
+              --data-urlencode "architecture=$architecture" \
+              --data-urlencode "unicode=$unicode" \
+              --data-urlencode "pdb=$pdb" \
+              --output "$bundle"
+            unzip -t "$bundle"
 
             mkdir -p ".release-stage/$(dirname "$target")"
-            curl --fail --silent --show-error --location --retry 3 \
-              "$base_url/$source_path" \
-              --output ".release-stage/$target"
+            unzip -p "$bundle" "$entry" > ".release-stage/$target"
+            test -s ".release-stage/$target"
 
             actual=$(python3 - ".release-stage/$target" <<'PY'
           from hashlib import sha1
@@ -64,12 +78,11 @@ jobs:
           import sys
 
           data = Path(sys.argv[1]).read_bytes()
-          digest = sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-          print(digest)
+          print(sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest())
           PY
             )
             if [ "$actual" != "$expected" ]; then
-              echo "Legacy payload mismatch for $source_path: $actual != $expected" >&2
+              echo "Legacy payload mismatch for $target: $actual != $expected" >&2
               exit 1
             fi
           done
@@ -78,21 +91,19 @@ jobs:
           find .release-stage -type f -exec touch -t 198001010000.00 {} +
           (cd .release-stage && find . -type f -printf '%P\n' | LC_ALL=C sort | zip -X "../$asset" -@ >/dev/null)
           unzip -t "$asset"
-          unzip -l "$asset"
           sha256sum "$asset"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release download "$tag" --pattern "$asset" --dir .release-verify
             cmp "$asset" ".release-verify/$asset"
-            echo "Release $tag already exists with the identical canonical asset."
           else
             gh release create "$tag" "$asset" \
               --target "$GITHUB_SHA" \
               --title "Spell Checker $version" \
-              --notes "Bootstrap of the existing HippoEDIT Spell Checker $version binary distribution from hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee. Binary payload is verified byte-for-byte by legacy Git blob SHA; PDB archive filename case is normalized to the package manifest."
+              --notes "Bootstrap of HippoEDIT Spell Checker $version from the supported public plugin bundle contract. Payload bytes are verified against hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee Git blob SHAs; PDB archive filename case is normalized to package-info.xml."
             gh release download "$tag" --pattern "$asset" --dir .release-verify
             cmp "$asset" ".release-verify/$asset"
           fi
 
-          echo "Canonical release asset:"
+          echo 'Canonical release asset:'
           sha256sum "$asset"

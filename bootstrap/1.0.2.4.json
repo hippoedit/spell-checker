@@ -7,14 +7,14 @@
   "source": {
     "repository": "hippoedit/website",
     "sha": "1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee",
-    "base_url": "https://www.hippoedit.com/download/plugins/spell_checker"
+    "bundle_url": "https://html-editor.hippoedit.com/api/get_bundle.php"
   },
   "files": {
-    "x32/SpellChecker.dll": {"source": "x32/SpellChecker.dll", "blob_sha": "7df85851a3d78dd06830ef7d8d3b389c64bcf7a5"},
-    "x32/SpellChecker.pdb.zip": {"source": "x32/spellchecker.pdb.zip", "blob_sha": "9519f5c149139aa44cded800a250e26ea7a6901a"},
-    "x32u/SpellChecker.dll": {"source": "x32u/SpellChecker.dll", "blob_sha": "0613d90c01b969e84b737adf96cedd358d3f10e7"},
-    "x32u/SpellChecker.pdb.zip": {"source": "x32u/spellchecker.pdb.zip", "blob_sha": "daeb57edc2bcd246e5d1e319a6cd6e647f147f92"},
-    "x64/SpellChecker.dll": {"source": "x64/SpellChecker.dll", "blob_sha": "5d5d51843abf554796adafa0a609f16d2f7466de"},
-    "x64/SpellChecker.pdb.zip": {"source": "x64/spellchecker.pdb.zip", "blob_sha": "8f1ebe7282fef84c8b5a19c1f51923bfc65ef7ac"}
+    "x32/SpellChecker.dll": {"architecture":"x32","unicode":"false","pdb":"false","entry":"x32/SpellChecker.dll","blob_sha":"7df85851a3d78dd06830ef7d8d3b389c64bcf7a5"},
+    "x32/SpellChecker.pdb.zip": {"architecture":"x32","unicode":"false","pdb":"true","entry":"x32/SpellChecker.pdb.zip","blob_sha":"9519f5c149139aa44cded800a250e26ea7a6901a"},
+    "x32u/SpellChecker.dll": {"architecture":"x32","unicode":"true","pdb":"false","entry":"x32u/SpellChecker.dll","blob_sha":"0613d90c01b969e84b737adf96cedd358d3f10e7"},
+    "x32u/SpellChecker.pdb.zip": {"architecture":"x32","unicode":"true","pdb":"true","entry":"x32u/SpellChecker.pdb.zip","blob_sha":"daeb57edc2bcd246e5d1e319a6cd6e647f147f92"},
+    "x64/SpellChecker.dll": {"architecture":"x64","unicode":"true","pdb":"false","entry":"x64/SpellChecker.dll","blob_sha":"5d5d51843abf554796adafa0a609f16d2f7466de"},
+    "x64/SpellChecker.pdb.zip": {"architecture":"x64","unicode":"true","pdb":"true","entry":"x64/SpellChecker.pdb.zip","blob_sha":"8f1ebe7282fef84c8b5a19c1f51923bfc65ef7ac"}
   }
 }
