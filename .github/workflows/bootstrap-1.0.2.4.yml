@@ -69,11 +69,11 @@ jobs:
           marker = text.find('Spell Checker')
           if marker < 0:
               raise SystemExit('Spell Checker marker missing')
-          window = text[max(0, marker - 2500):marker + 5000]
-          matches = re.findall(r'href=["\']([^"\']*get_bundle\.php[^"\']*type=plugin[^"\']*)["\']', window, re.I)
+          matches = list(re.finditer(r'href=["\']([^"\']*get_bundle\.php[^"\']*type=plugin[^"\']*)["\']', text, re.I))
           if not matches:
-              raise SystemExit('Unable to find Spell Checker bundle href near marker')
-          print(html.unescape(matches[-1]))
+              raise SystemExit('Unable to find plugin bundle links')
+          match = min(matches, key=lambda item: abs(item.start() - marker))
+          print(html.unescape(match.group(1)))
           PY
           )
           echo "Spell Checker bundle href: $bundle_href"
