@@ -1,4 +1,4 @@
-name: Bootstrap canonical SpellChecker release
+name: Diagnose live SpellChecker publication
 
 on:
   push:
@@ -6,101 +6,33 @@ on:
     paths: [.github/workflows/bootstrap-release.yml]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  diagnose:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - name: Build verified release from public plugin bundles
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Inspect bounded live markup
         run: |
           set -euo pipefail
-          manifest=bootstrap/1.0.2.4.json
-          version=$(jq -r '.version' "$manifest")
-          tag=$(jq -r '.tag' "$manifest")
-          asset=$(jq -r '.asset' "$manifest")
-          plugin_id=$(jq -r '.plugin_id' "$manifest")
-
-          rm -rf .stage .bundles .verify "$asset"
-          mkdir -p .stage .bundles .verify
-          cp package-info.xml .stage/package-info.xml
-
           curl --fail --silent --show-error --location --retry 3 \
             --user-agent 'HippoEDIT-GitHub-Actions/1.0' \
             'https://www.hippoedit.com/plugins.php?lang=en' \
-            --output .bundles/plugins.html
-
-          bundle_url=$(python3 - .bundles/plugins.html <<'PY'
-          import html
+            --output /tmp/plugins.html
+          python3 - /tmp/plugins.html <<'PY'
           from pathlib import Path
           import re
           import sys
-          from urllib.parse import urljoin
 
           text = Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace')
-          rows = re.findall(r'<tr\b.*?</tr>', text, re.I | re.S)
-          for row in rows:
-              if not re.search(r'>\s*Spell Checker\s*<', row, re.I):
-                  continue
-              match = re.search(r'href=["\']([^"\']*get_bundle\.php[^"\']*type=plugin[^"\']*)["\']', row, re.I)
-              if not match:
-                  raise SystemExit('Spell Checker row has no bundle href')
-              print(urljoin('https://www.hippoedit.com/plugins.php?lang=en', html.unescape(match.group(1))))
-              raise SystemExit(0)
-          raise SystemExit('Exact Spell Checker table row not found')
+          matches = list(re.finditer(r'Spell Checker', text, re.I))
+          print(f'Spell Checker occurrences: {len(matches)}')
+          for index, match in enumerate(matches, 1):
+              start = max(0, match.start() - 700)
+              end = min(len(text), match.end() + 1400)
+              context = re.sub(r'\s+', ' ', text[start:end])
+              print(f'--- occurrence {index} at {match.start()} ---')
+              print(context)
+          if not matches:
+              raise SystemExit('Spell Checker marker missing')
           PY
-          )
-          echo "Live Spell Checker bundle: $bundle_url"
-
-          jq -c '.files | to_entries[]' "$manifest" | while IFS= read -r item; do
-            target=$(jq -r '.key' <<<"$item")
-            arch=$(jq -r '.value.architecture' <<<"$item")
-            unicode=$(jq -r '.value.unicode' <<<"$item")
-            pdb=$(jq -r '.value.pdb' <<<"$item")
-            entry=$(jq -r '.value.entry' <<<"$item")
-            expected=$(jq -r '.value.blob_sha' <<<"$item")
-            bundle=".bundles/$(echo "$target" | tr '/' '_').hebundle"
-
-            curl --fail --silent --show-error --location --retry 3 \
-              --user-agent 'HippoEDIT-GitHub-Actions/1.0' --get "$bundle_url" \
-              --data-urlencode "architecture=$arch" --data-urlencode "unicode=$unicode" \
-              --data-urlencode "pdb=$pdb" --output "$bundle"
-            unzip -t "$bundle"
-
-            bundle_meta=$(unzip -p "$bundle" package-info.xml)
-            grep -Fq "<id>${plugin_id}</id>" <<<"$bundle_meta"
-            grep -Fq "<version>${version}</version>" <<<"$bundle_meta"
-
-            mkdir -p ".stage/$(dirname "$target")"
-            unzip -p "$bundle" "$entry" > ".stage/$target"
-            test -s ".stage/$target"
-
-            actual=$(python3 - ".stage/$target" <<'PY'
-          from hashlib import sha1
-          from pathlib import Path
-          import sys
-          data = Path(sys.argv[1]).read_bytes()
-          print(sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest())
-          PY
-            )
-            if [ "$actual" != "$expected" ]; then
-              echo "Payload mismatch for $target: $actual != $expected" >&2
-              exit 1
-            fi
-          done
-
-          test "$(find .stage -type f | wc -l)" = 7
-          find .stage -type f -exec touch -t 198001010000.00 {} +
-          (cd .stage && find . -type f -printf '%P\n' | LC_ALL=C sort | zip -X "../$asset" -@ >/dev/null)
-          unzip -t "$asset"
-          digest=$(sha256sum "$asset" | awk '{print $1}')
-          echo "SHA256=$digest"
-
-          gh release create "$tag" "$asset" --target "$GITHUB_SHA" \
-            --title "Spell Checker $version" \
-            --notes "Canonical bootstrap of HippoEDIT Spell Checker $version. Binary payload is verified byte-for-byte against hippoedit/website@1fcab5602e8f06bfd3c87d5ea7a441956f74c8ee Git blob SHAs; PDB archive filename case is normalized to package-info.xml."
-          gh release download "$tag" --pattern "$asset" --dir .verify
-          cmp "$asset" ".verify/$asset"
