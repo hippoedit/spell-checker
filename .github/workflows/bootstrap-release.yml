@@ -1,4 +1,4 @@
-name: Diagnose live SpellChecker publication
+name: Diagnose installer SpellChecker payload
 
 on:
   push:
@@ -12,27 +12,22 @@ jobs:
   diagnose:
     runs-on: ubuntu-24.04
     steps:
-      - name: Inspect bounded live markup
+      - name: Inspect installer archives without executing them
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --retry 3 \
-            --user-agent 'HippoEDIT-GitHub-Actions/1.0' \
-            'https://www.hippoedit.com/plugins.php?lang=en' \
-            --output /tmp/plugins.html
-          python3 - /tmp/plugins.html <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          text = Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace')
-          matches = list(re.finditer(r'Spell Checker', text, re.I))
-          print(f'Spell Checker occurrences: {len(matches)}')
-          for index, match in enumerate(matches, 1):
-              start = max(0, match.start() - 700)
-              end = min(len(text), match.end() + 1400)
-              context = re.sub(r'\s+', ' ', text[start:end])
-              print(f'--- occurrence {index} at {match.start()} ---')
-              print(context)
-          if not matches:
-              raise SystemExit('Spell Checker marker missing')
-          PY
+          mkdir -p /tmp/hippo-installers
+          cd /tmp/hippo-installers
+          for file in hippou200.exe hippo200.exe hippo64_200.exe; do
+            echo "=== $file ==="
+            status=$(curl --silent --show-error --location --retry 3 \
+              --user-agent 'HippoEDIT-GitHub-Actions/1.0' \
+              --output "$file" --write-out '%{http_code}' \
+              "https://www.hippoedit.com/download/$file" || true)
+            echo "HTTP=$status"
+            test "$status" = 200
+            ls -l "$file"
+            sha256sum "$file"
+            file "$file"
+            echo '--- SpellChecker archive entries ---'
+            7z l -ba "$file" | grep -i -E 'spell.?checker|spellchecker' || true
+          done
